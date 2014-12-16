@@ -1,0 +1,11 @@
+Learning Scrapy:
+2 hours
+
+Spider Design:
+1 hour
+
+Implementation:
+
+
+Testing:
+
