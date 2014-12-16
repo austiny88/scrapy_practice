@@ -9,6 +9,21 @@ import scrapy
 
 
 class LocationsItem(scrapy.Item):
-    # define the fields for your item here like:
-    # name = scrapy.Field()
-    pass
+    city = scrapy.Field()
+    state = scrapy.Field()
+    country = scrapy.Field()
+    address = scrapy.Field()
+    zipcode = scrapy.Field()
+
+    hours = scrapy.Field()
+    services = scrapy.Field()
+
+    store_email = scrapy.Field()
+    phone_number = scrapy.Field()
+
+    store_id = scrapy.Field()
+    store_url = scrapy.Field()
+    store_name = scrapy.Field()
+    weekly_ad_url = scrapy.Field()
+    store_image_url = scrapy.Field()
+    store_floor_plan_url = scrapy.Field()
