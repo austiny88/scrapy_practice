@@ -8,7 +8,7 @@
 import scrapy
 
 
-class LocationsItem(scrapy.Item):
+class LocationItem(scrapy.Item):
     city = scrapy.Field()
     state = scrapy.Field()
     country = scrapy.Field()
