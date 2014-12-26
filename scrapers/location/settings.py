@@ -12,6 +12,9 @@ BOT_NAME = 'location'
 
 SPIDER_MODULES = ['location.spiders']
 NEWSPIDER_MODULE = 'location.spiders'
+ITEM_PIPELINES = {
+    'location.pipelines.JsonLocationsPipeline': 500,
+}
 
 # Crawl responsibly by identifying yourself (and your website) on the user-agent
 #USER_AGENT = 'location (+http://www.yourdomain.com)'
