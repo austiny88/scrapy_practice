@@ -1,6 +1,9 @@
 import scrapy
+from scrapy import log
 from scrapy.http import Request
 from location.items import LocationItem
+
+#log.start(loglevel=log.INFO)
 
 
 class AppleSpider(scrapy.Spider):
@@ -11,36 +14,37 @@ class AppleSpider(scrapy.Spider):
     def parse(self, response):
         raw_store_links = response.selector.xpath("//div[@id='content']").xpath(".//li").xpath(".//a")
 
-        location_items = []
+        #location_items = []
         for path in raw_store_links:
             href = path.xpath("@href").extract()[0]
             url = u"http://www.apple.com" + href
-            #print(url)
-            location_item = Request(url=url, callback=self.parse_store)
-            location_items.append(location_item)
 
-        return location_items
+            location_item = Request(url=url, callback=self.parse_store)
+
+            yield location_item
 
     def parse_store(self, response):
         item = LocationItem()
 
-        country_abrev = response.url.split('http://www.apple.com/')[1].split('/')
-        if country_abrev == 'retail':
+        split_url = response.url.split('http://www.apple.com/')[1].split('/')
+        if split_url[0] == 'retail':
             country_abrev = 'us'
+        else:
+            country_abrev = split_url[0]
         item['country'] = country_abrev
 
         try:
-            item['city'] = response.xpath("//div[@id='gallery-mapSwap']/div[1]//span[@class='locality']/text()").extract()[0]
+            item['city'] = response.xpath("//span[@class='locality']/text()").extract()[0]
         except IndexError as e:
             item['city'] = None
 
         try:
-            item['state'] = response.xpath("//div[@id='gallery-mapSwap']/div[1]//span[@class='region']/text()").extract()[0]
+            item['state'] = response.xpath("//span[@class='region']/text()").extract()[0]
         except IndexError as e:
             item['state'] = None
 
         try:
-            item['zipcode'] = response.xpath("//div[@id='gallery-mapSwap']/div[1]//span[@class='postal-code']/text()").extract()[0]
+            item['zipcode'] = response.xpath("//span[@class='postal-code']/text()").extract()[0]
         except IndexError as e:
             item['zipcode'] = None
 
@@ -70,6 +74,8 @@ class AppleSpider(scrapy.Spider):
         item['store_image_url'] = response.xpath("//div[@class='column last']/img/@src").extract()[0]
         item['store_floor_plan_url'] = None
 
+        return item
+
     def parse_to_hours_dict(self, store_hours):
         days_of_week = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
         operating_hours = {}
@@ -88,6 +94,7 @@ class AppleSpider(scrapy.Spider):
             for data in hours_data:
                 try:
                     open_hour, close_hour = data[1].split('-')
+                    print('open: {}, close: {}'.format(open_hour, close_hour))#, level=log.INFO)
                 except (ValueError, IndexError) as e:
                     # failed to split to open_hour and close_hour
                     # must not be a row containing useful operating hours information
@@ -99,6 +106,7 @@ class AppleSpider(scrapy.Spider):
                 for days_subset in days_set:
                     try:
                         contiguous_start, contiguous_end = days_subset.split('-')
+                        print('cont_start: {}, cont_end: {}'.format(contiguous_start, contiguous_end))#, level=log.INFO)
                     except ValueError as e:
                         # this days_subset does not contain contiguous days (days separated by '-')
                         if days_subset in days_of_week:
@@ -114,6 +122,7 @@ class AppleSpider(scrapy.Spider):
                         continue
 
                     temp_days.extend(days_of_week[start_index:end_index + 1])
+                    print('operating_days: {}'.format(temp_days))#, level=log.INFO)
 
                 for day in temp_days:
                     operating_hours[day] = {'open': open_hour, 'close': close_hour}

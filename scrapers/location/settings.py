@@ -9,9 +9,13 @@
 #
 
 BOT_NAME = 'location'
-
+LOG_LEVEL = 'INFO'
 SPIDER_MODULES = ['location.spiders']
 NEWSPIDER_MODULE = 'location.spiders'
+"""
+FEED_EXPORTERS_BASE = {
+    'json': 'scrapy.contrib.exporter.JsonItemExporter'
+}"""
 ITEM_PIPELINES = {
     'location.pipelines.JsonLocationsPipeline': 500,
 }
