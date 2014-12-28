@@ -9,7 +9,10 @@
 #
 
 BOT_NAME = 'location'
-LOG_LEVEL = 'INFO'
+BOT_NAME = 'location'
+LOG_FILE = 'apple.log'
+LOG_LEVEL = 'DEBUG'
+LOG_ENABLED = True
 SPIDER_MODULES = ['location.spiders']
 NEWSPIDER_MODULE = 'location.spiders'
 """
