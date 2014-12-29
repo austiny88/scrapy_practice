@@ -2,8 +2,6 @@ import scrapy
 from scrapy.http import Request
 from location.items import LocationItem
 
-#log.start(loglevel=log.INFO)
-
 
 class AppleSpider(scrapy.Spider):
     name = 'apple'
@@ -75,7 +73,7 @@ class AppleSpider(scrapy.Spider):
         return item
 
     def parse_to_hours_dict(self, store_hours, url):
-        self.log('-- parsing hours for {}'.format(url), level=scrapy.log.INFO)
+        self.log('-- parsing hours for {}'.format(url), level=scrapy.log.DEBUG)
 
         days_of_week = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
         operating_hours = {}
@@ -91,27 +89,39 @@ class AppleSpider(scrapy.Spider):
                     .replace('</td>', '')\
                     .split(':', 1)
 
-            self.log("hours_data: {}".format(hours_data), level=scrapy.log.INFO)
+            self.log("hours_data: {}".format(hours_data), level=scrapy.log.DEBUG)
 
             try:
                 open_hour, close_hour = hours_data[1].split('-')
-                self.log('open: {}, close: {}'.format(open_hour, close_hour), level=scrapy.log.INFO)
+                self.log('open: {}, close: {}'.format(open_hour, close_hour), level=scrapy.log.DEBUG)
             except (ValueError, IndexError) as e:
                 # failed to split to open_hour and close_hour
                 # must not be a row containing useful operating hours information
-                self.log("** failed to split to open_hour and close_hour", level=scrapy.log.INFO)
+                self.log("** failed to split to open_hour and close_hour", level=scrapy.log.DEBUG)
                 continue
 
             temp_days = []
             non_parsed_days = hours_data[0]
             days_set = non_parsed_days.split(',')
 
-            self.log("days_set: {}".format(days_set), level=scrapy.log.INFO)
+            self.log("days_set: {}".format(days_set), level=scrapy.log.DEBUG)
 
             for days_subset in days_set:
                 try:
                     contiguous_start, contiguous_end = days_subset.split('-')
-                    self.log('cont_start: {}, cont_end: {}'.format(contiguous_start, contiguous_end), level=scrapy.log.INFO)
+
+                    self.log('cont_start: {}, cont_end: {}'.format(contiguous_start, contiguous_end), level=scrapy.log.DEBUG)
+
+                    try:
+                        start_index = days_of_week.index(contiguous_start)
+                        end_index = days_of_week.index(contiguous_end)
+                    except ValueError as e:
+                        # contiguous_start or contiguous_end was not contained in days_of_week
+                        # this row must not contain useful operating hours information
+                        continue
+
+                    temp_days.extend(days_of_week[start_index:end_index + 1])
+
                 except ValueError as e:
                     # this days_subset does not contain contiguous days (days separated by '-')
                     if days_subset in days_of_week:
@@ -119,17 +129,7 @@ class AppleSpider(scrapy.Spider):
                     else:
                         continue
 
-                try:
-                    start_index = days_of_week.index(contiguous_start)
-                    end_index = days_of_week.index(contiguous_end)
-                except ValueError as e:
-                    # contiguous_start or contiguous_end was not contained in days_of_week
-                    # this row must not contain useful operating hours information
-                    continue
-
-                temp_days.extend(days_of_week[start_index:end_index + 1])
-
-                self.log('operating_days: {}'.format(temp_days), level=scrapy.log.INFO)
+                self.log('operating_days: {}'.format(temp_days), level=scrapy.log.DEBUG)
 
             for day in temp_days:
                 operating_hours[day] = {'open': open_hour, 'close': close_hour}
