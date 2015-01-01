@@ -1,11 +1,11 @@
 Learning Scrapy:
-5 hours
+7 hours
 
 Spider Design:
-9 hour
+11 hour
 
 Implementation:
 
 
 Testing:
-2
+4

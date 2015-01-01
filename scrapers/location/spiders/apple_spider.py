@@ -24,10 +24,10 @@ class AppleSpider(scrapy.Spider):
 
         split_url = response.url.split('http://www.apple.com/')[1].split('/')
         if split_url[0] == 'retail':
-            country_abrev = 'us'
+            country_abbrev = 'us'
         else:
-            country_abrev = split_url[0]
-        item['country'] = country_abrev
+            country_abbrev = split_url[0]
+        item['country'] = country_abbrev
 
         try:
             item['city'] = response.xpath("//span[@class='locality']/text()").extract()[0]
@@ -44,14 +44,37 @@ class AppleSpider(scrapy.Spider):
         except IndexError as e:
             item['zipcode'] = None
 
-        raw_street_addresses = response.xpath("//div[@id='gallery-mapSwap']/div[1]//div[@class='street-address']/text()").extract()
-        street_address = []
-        for raw_street_address in raw_street_addresses:
-            street_address.append(raw_street_address.replace('\n', '').replace('\t', ''))
+        address_data = response.xpath("//address")[0].xpath(".//text()").extract()[5:-1]
+        address = ['']
+        for data in address_data:
+            if data == '\n\t':
+                continue
 
-        item['address'] = street_address
+            if data[:3] == '\n\t\t':
+                cleaned_data = data.replace('\n', '').replace('\t', '')
+                if address[-1] == '':
+                    address[-1] += cleaned_data
+                else:
+                    address.append(cleaned_data)
+                address.append('')
+                continue
 
-        item['hours'] = self.parse_to_hours_dict(response.xpath("//table[@class='store-info']/tr").extract(), response.url)
+            if address[-1] == '':
+                address[-1] += data
+            elif data == ', ':
+                address[-1] += ','
+            elif data == ' ':
+                pass
+            else:
+                address[-1] += ' ' + data
+
+        item['address'] = [line for line in address if line != '']
+
+        item['hours'] = self.parse_to_hours_dict(
+                response.xpath("//table[@class='store-info']/tr").extract(),
+                response.url
+                )
+
         item['services'] = response.xpath("//*[@id='main']/header/nav[1]/div[2]/a/img/@alt").extract()
         item['store_email'] = None
         item['phone_number'] = response.xpath("//div[@class='telephone-number']/text()")\
@@ -110,7 +133,10 @@ class AppleSpider(scrapy.Spider):
                 try:
                     contiguous_start, contiguous_end = days_subset.split('-')
 
-                    self.log('cont_start: {}, cont_end: {}'.format(contiguous_start, contiguous_end), level=scrapy.log.DEBUG)
+                    self.log(
+                            "cont_start: {}, cont_end: {}".format(contiguous_start, contiguous_end),
+                            level=scrapy.log.DEBUG
+                            )
 
                     try:
                         start_index = days_of_week.index(contiguous_start)

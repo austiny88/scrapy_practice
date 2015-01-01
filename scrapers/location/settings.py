@@ -9,16 +9,11 @@
 #
 
 BOT_NAME = 'location'
-BOT_NAME = 'location'
 LOG_FILE = 'apple.log'
-LOG_LEVEL = 'DEBUG'
+LOG_LEVEL = 'INFO'
 LOG_ENABLED = True
 SPIDER_MODULES = ['location.spiders']
 NEWSPIDER_MODULE = 'location.spiders'
-"""
-FEED_EXPORTERS_BASE = {
-    'json': 'scrapy.contrib.exporter.JsonItemExporter'
-}"""
 ITEM_PIPELINES = {
     'location.pipelines.JsonLocationsPipeline': 500,
 }
