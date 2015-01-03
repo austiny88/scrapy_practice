@@ -77,6 +77,7 @@ class WetsealSpider(scrapy.Spider):
 
         # Sunday occurs twice
         days_of_week = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+        days_of_week_alt = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
         operating_hours = {}
 
         for row in store_hours:
@@ -106,13 +107,24 @@ class WetsealSpider(scrapy.Spider):
             elif len(days_set) == 2:
                 try:
                     first_day = days_of_week.index(days_set[0])
+                except ValueError as e:
+                    try:
+                        first_day = days_of_week_alt.index(days_set[0])
+                    except ValueError as e:
+                        self.log("{} was not identified as a day of the week.".format(days_set[0]), level=scrapy.log.INFO)
+                        continue
 
-                    temp_week = [days_of_week[i % 7] for i in xrange(first_day, first_day + 7)]
+                temp_week = [days_of_week[i % 7] for i in xrange(first_day, first_day + 7)]
 
+                try:
                     end_index = temp_week.index(days_set[1])
                 except ValueError as e:
-                    self.log("a member of days_set was not found in days_of_week", level=scrapy.log.DEBUG)
-                    continue
+                    temp_week_alt = [days_of_week_alt[i % 7] for i in xrange(first_day, first_day + 7)]
+                    try:
+                        end_index = temp_week_alt.index(days_set[1])
+                    except ValueError as e:
+                        self.log("{} was not identified as a day of the week.".format(days_set[1]), level=scrapy.log.INFO)
+                        continue
 
                 temp_days.extend(temp_week[:end_index + 1])
             else:
