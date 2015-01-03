@@ -1,6 +1,6 @@
 import scrapy
 from scrapy.http import Request
-from location.items import LocationItem
+from trial.items import LocationItem
 
 
 class WetsealSpider(scrapy.Spider):
