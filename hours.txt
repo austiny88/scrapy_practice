@@ -6,14 +6,24 @@ apple_spider:
     11 hours
 
     Testing:
-    4
+    4 hours
 
 wetseal_spider:
     Learning Scrapy:
     2 hours
 
     Spider Design / Implementation:
-    4
+    4 hours
 
     Testing:
     2 hours
+
+hhgregg_spider:
+    Learning Scrapy:
+    1 hours
+
+    Spider Design / Implementation:
+    1 hours
+
+    Testing:
+
