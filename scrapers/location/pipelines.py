@@ -19,7 +19,8 @@ class JsonLocationsPipeline(object):
         return item
 
     def open_spider(self, spider):
-        file = open('apple_locations.json', 'w')
+        file_name = spider.name + '_locations.json'
+        file = open(file_name, 'w')
         self.files[spider] = file
         self.exporter = JsonItemExporter(file)
         self.exporter.start_exporting()
