@@ -23,21 +23,29 @@ class HhgreggSpider(scrapy.Spider):
     def parse(self, response):
         category_links = response.xpath("//a[@class='menuLinks']/@href").extract()
 
-        for category_link in category_links:
-            product_links = self.get_product_links(category_link)
+        self.log("{} Category links to visit".format(len(category_links)), level=scrapy.log.DEBUG)
 
+        for category_link in category_links:
+            self.log("Category link: {}".format(category_link), level=scrapy.log.DEBUG)
+
+            product_links = Request(url=category_link, callback=self.get_product_links)
+            """
             for product_link in product_links:
+                self.log("Product link: {}".format(product_link), level=scrapy.log.DEBUG)
 
                 pass
 
-                yield item
+                #yield item
 
-            pass
+            pass"""
 
-    def get_product_links(self, link):
+    def get_product_links(self, response):
+
         product_links = []
 
-        pass
+        product_links.extend(
+                response.xpath("//div[@class='item_container']/div[@class='information']/h3/a/@href").extract()
+                )
 
         return product_links
 

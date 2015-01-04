@@ -20,10 +20,10 @@ wetseal_spider:
 
 hhgregg_spider:
     Learning Scrapy:
-    1 hours
+    2 hours
 
     Spider Design / Implementation:
-    1 hours
+    3 hours
 
     Testing:
 
