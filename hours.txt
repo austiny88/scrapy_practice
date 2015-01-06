@@ -23,7 +23,7 @@ hhgregg_spider:
     2 hours
 
     Spider Design / Implementation:
-    5 hours
+    6 hours
 
     Testing:
-
+    2

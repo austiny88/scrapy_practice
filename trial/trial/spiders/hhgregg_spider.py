@@ -1,3 +1,5 @@
+import math
+
 import scrapy
 from scrapy.http import Request
 from scrapy.selector import Selector
@@ -31,8 +33,6 @@ class HhgreggSpider(scrapy.Spider):
     start_urls = ["http://www.hhgregg.com/"]
 
     def parse(self, response):
-        #all_products = []
-
         category_links = response.xpath("//a[@class='menuLinks']/@href").extract()
 
         self.log("{} Category links to visit".format(len(category_links)), level=scrapy.log.INFO)
@@ -44,7 +44,6 @@ class HhgreggSpider(scrapy.Spider):
 
     def handle_category(self, response):
         # The products are zero-index based, FYI
-        self.log("inside get_product_links...", level=scrapy.log.DEBUG)
 
         category_products = []
 
@@ -54,14 +53,19 @@ class HhgreggSpider(scrapy.Spider):
 
         # Find the 'next page' url
         try:
-            raw_url = sel.re("SearchBasedNavigationDisplayJS.init\('.*'")[0]
+            re_result = sel.re("SearchBasedNavigationDisplayJS.init\('.*'")[0]
+            self.log("Found next product page url", level=scrapy.log.DEBUG)
         except (ValueError, IndexError) as e:
-            self.log("Could not find next product page url", level=scrapy.log.INFO)
+            self.log("Could not find next product page url", level=scrapy.log.DEBUG)
             return
 
-        self.log("Found next product page url", level=scrapy.log.DEBUG)
+        # Clean up the url
+        try:
+            raw_url = re_result.rsplit("('")[1]
+        except IndexError as e:
+            self.log("Failed to split regex result: {}".format(re_result), level=scrapy.log.ERROR)
+            return
 
-        # clean up the url
         if raw_url[-1] == u"'" or raw_url[-1] == u'\r':
             raw_url = raw_url[:-1]
 
@@ -71,42 +75,69 @@ class HhgreggSpider(scrapy.Spider):
 
         url = raw_url + u'&beginIndex='
 
+        # Calculate how many pages to visit
+        # find the number products in this category
+        raw_num_and_results_str = response.xpath("//div[@class='showing_prod']/text()").extract()[0]
+        raw_num_str = raw_num_and_results_str.split(u'\xa0')[0]
+        num_products_str = raw_num_str\
+                .replace('\r', '')\
+                .replace('\n', '')\
+                .replace('\t', '')\
+                .strip()
+        num_products = float(num_products_str)
+
+        total_pages = int(math.ceil(num_products / prod_per_page))
+
         pages = 0
 
-        products = [product for product in self.parse_page(response)]
+        # Parse the 1st (current) page of products
+        page_products = self.parse_page(response)
 
-        category_products.extend(products)
+        category_products.extend(page_products)
 
-        while len(products) >= prod_per_page:
-            pages += 1
+        pages += 1
 
+        # Loop over each page of products for this category
+        while pages >= total_pages:
             # Build the new url:
             # split the old 'beginIndex' value off (at the first, rightmost '='), this creates a list of len == 2
-            # select the first element of the list, this is the body of the url
-            # add back to it the '=' and the new product 'beginIndex'
+            # select the first element (zeroth position) of the list, this is the body of the url
+            # add back to it the '=' and the new product 'beginIndex' value
             url = url.rsplit('=', 1)[0] + u'={}'.format(prod_per_page * pages)
 
             page_products = Request(url=url, callback=self.parse_page)
 
+            try:
+                len(page_products)
+            except TypeError as e:
+                page_products = [page_products]
+
             category_products.extend(page_products)
+
+            pages += 1
 
         return category_products
 
     def parse_page(self, response):
         self.log("Inside parse_page", level=scrapy.log.DEBUG)
 
-        #page_products = []
+        page_products = []
 
         product_links = response.xpath("//div[@class='item_container']/div[@class='information']/h3/a/@href").extract()
 
         for link in product_links:
             url = "http://www.hhgregg.com" + link
 
-            self.log("product link: {}".format(url), level=scrapy.log.DEBUG)
+            self.log("product link: '{}'".format(url), level=scrapy.log.DEBUG)
 
-            yield Request(url=url, callback=self.parse_product)
+            page_products.append(Request(url=url, callback=self.parse_product))
+
+        return page_products
 
     def parse_product(self, response):
         self.log("Inside parse_product", level=scrapy.log.DEBUG)
 
-        return ProductItem()
+        item = ProductItem()
+        item['title'] = response.url
+
+        return item
