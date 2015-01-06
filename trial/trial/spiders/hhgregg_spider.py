@@ -18,14 +18,14 @@ Design:
 
 get_product_links:
 - need to know how many products per page (can probably assume the default of 12)
-- need to know when there are no more product pages to visit (either calculate, or look for lack of next page button)
+- need to know how many pages to visit
 
 * Build the url that will be used to fetch successive product pages
 * Grab the product urls from the current page.
 * Loop until there are no more products in the current category
 
-
 """
+
 
 class HhgreggSpider(scrapy.Spider):
     name = 'hhgregg'
@@ -45,9 +45,8 @@ class HhgreggSpider(scrapy.Spider):
     def handle_category(self, response):
         # The products are zero-index based, FYI
 
-        category_products = []
-
         prod_per_page = 12
+        category_products = []
 
         sel = Selector(response=response)
 
@@ -85,20 +84,17 @@ class HhgreggSpider(scrapy.Spider):
                 .replace('\t', '')\
                 .strip()
         num_products = float(num_products_str)
-
         total_pages = int(math.ceil(num_products / prod_per_page))
 
-        pages = 0
+        self.log("In category, {} products, {} pages".format(num_products_str, total_pages), level=scrapy.log.DEBUG)
 
         # Parse the 1st (current) page of products
         page_products = self.parse_page(response)
-
         category_products.extend(page_products)
-
-        pages += 1
+        pages = 1
 
         # Loop over each page of products for this category
-        while pages >= total_pages:
+        while pages < total_pages:
             # Build the new url:
             # split the old 'beginIndex' value off (at the first, rightmost '='), this creates a list of len == 2
             # select the first element (zeroth position) of the list, this is the body of the url
@@ -108,19 +104,19 @@ class HhgreggSpider(scrapy.Spider):
             page_products = Request(url=url, callback=self.parse_page)
 
             try:
-                len(page_products)
+                # If page_products is returned as iterable
+                category_products.extend(page_products)
             except TypeError as e:
-                page_products = [page_products]
-
-            category_products.extend(page_products)
+                # If page_products is returned as Request object
+                category_products.append(page_products)
 
             pages += 1
+
+        self.log("Received {} products".format(len(category_products)), level=scrapy.log.DEBUG)
 
         return category_products
 
     def parse_page(self, response):
-        self.log("Inside parse_page", level=scrapy.log.DEBUG)
-
         page_products = []
 
         product_links = response.xpath("//div[@class='item_container']/div[@class='information']/h3/a/@href").extract()
@@ -132,11 +128,11 @@ class HhgreggSpider(scrapy.Spider):
 
             page_products.append(Request(url=url, callback=self.parse_product))
 
+        self.log("In parse_page, found {} products".format(len(page_products)), level=scrapy.log.DEBUG)
+
         return page_products
 
     def parse_product(self, response):
-        self.log("Inside parse_product", level=scrapy.log.DEBUG)
-
         item = ProductItem()
         item['title'] = response.url
 
