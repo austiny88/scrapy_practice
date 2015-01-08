@@ -1,3 +1,4 @@
+import json
 import math
 
 import scrapy
@@ -134,6 +135,119 @@ class HhgreggSpider(scrapy.Spider):
 
     def parse_product(self, response):
         item = ProductItem()
-        item['title'] = response.url
+
+        # Ex. '(Model: WRX735SDBM)'
+        try:
+            raw_mpn = response.xpath("//span[@class='model_no']/text()").extract()[0]
+            mpn = raw_mpn.split(':')[1].strip().strip(')')
+        except IndexError as e:
+            self.log("No mpn found", level=scrapy.log.INFO)
+            mpn = None
+
+        item['mpn'] = mpn
+        item['sku'] = mpn
+        item['upc'] = None
+        item['model'] = mpn    # I don't see a distinction between the two on hhgregg
+
+        # Ex. 'Whirlpool 24.5 Cu. Ft. Stainless Steel French Door 4-Door Refrigerator'
+        try:
+            title = response.xpath("//h1[@class='catalog_link CachedItemSegmentItemDisplay']/text()").extract()[0]
+            brand = title.split(' ')[0]
+        except IndexError as e:
+            self.log("No title found", level=scrapy.log.INFO)
+            title = None
+            brand = None
+
+        item['title'] = title
+
+        item['brand'] = brand
+
+        item['trail'] = response.xpath("//div[@id='breadcrumb']/a/text()").extract()
+
+        try:
+            raw_rating = response.xpath("//span[@class='pr-rating pr-rounded average']/text()").extract()[0]
+            try:
+                item['rating'] = int((float(raw_rating) / 5) * 100)
+            except ValueError as e:
+                self.log("Couldn't convert rating to float: {}".format(raw_rating), level=scrapy.log.INFO)
+                item['rating'] = None
+        except IndexError as e:
+            self.log("No rating found", level=scrapy.log.INFO)
+            item['rating'] = None
+
+        item['features'] = response.xpath("//div[@class='features_list']/ul/li/span/b/text()").extract()
+
+        image_request_url_base = 'http://hhgregg.scene7.com/is/image/hhgregg/'
+        image_request_params = '_is?req=set,json'
+        image_req_url = image_request_url_base + mpn + image_request_params
+
+        image_req = Request(url=image_req_url, callback=self.get_image_urls)
+        image_req.meta['item'] = item
+
+        raw_id = response.xpath("//div[contains(@id, 'productIdForPartNum')]/@id").extract()[0]
+        item['retailer_id'] = raw_id.split('_')[1]
+
+        try:
+            item['description'] = response.xpath("//div[@id='Features']/div[@class='']/p/text()").extract()[0]
+        except IndexError as e:
+            self.log("No description found", level=scrapy.log.INFO)
+            item['description'] = ''
+
+        item['currency'] = 'USD'    # There are no hhgregg stores outside the U.S.
+
+        try:
+            raw_current_price = response.xpath("//span[@class='price spacing']/text()").extract()[0]
+            item['current_price'] = raw_current_price\
+                    .replace('\n', '')\
+                    .replace('\r', '')\
+                    .replace('\t', '')\
+                    .replace(' ', '')
+        except IndexError as e:
+            self.log("No current price found", level=scrapy.log.INFO)
+            item['current_price'] = None
+
+        try:
+            raw_original_price = response.xpath("//div[@class='reg_price strike-through']/span[2]/text()").extract()[0]
+            item['original_price'] = raw_original_price\
+                .replace('\n', '')\
+                .replace('\r', '')\
+                .replace('\t', '')\
+                .replace(' ', '')
+        except IndexError as e:
+            self.log("No original price found", level=scrapy.log.INFO)
+            item['original_price'] = None
+
+        specs = {}
+        details = response.xpath("//div[@class='specDetails']")
+        for detail in details:
+            raw_spec_names = detail.xpath(".//span[@class='dotted']/text()").extract()
+            raw_spec_values = detail.xpath(".//span[@class='specdesc_right']/text()").extract()
+
+            spec_names = map(lambda name: name.split(':')[0], raw_spec_names)
+            spec_values = map(lambda value: value.replace('\n', '').replace('\r', '').strip().rstrip(), raw_spec_values)
+
+            for spec_name, spec_value in zip(spec_names, spec_values):
+                specs[spec_name] = spec_value
+
+        item['specifications'] = specs
+        item['available_online'] = True if response.xpath("//div[contains(@class, 'InstoreSpecialOrder')]") else False
+        item['available_instore'] = True    # Haven't been able to find an item that was online only for all locations
+
+        return item
+
+    def get_image_urls(self, response):
+        item = response.meta['item']
+        body = response.body    # body includes json data
+
+        # The slice below discards non-json data at the beginning and end of the body
+        image_req_dict = json.loads(body[body.index('{'):body.rindex('}')+1])
+        image_data_list = image_req_dict['set']['item']
+
+        image_urls = []
+        for image_data in image_data_list:
+            image_urls.append('http://hhgregg.scene7.com/is/image/' + image_data['i']['n'])
+
+        item['image_urls'] = image_urls
+        item['primary_image_url'] = image_urls[0]
 
         return item

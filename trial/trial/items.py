@@ -47,5 +47,5 @@ class ProductItem(scrapy.Item):
     original_price = scrapy.Field()
     specifications = scrapy.Field()
     available_online = scrapy.Field()
-    primary_image_url = scrapy.Field()
     available_instore = scrapy.Field()
+    primary_image_url = scrapy.Field()
