@@ -18,8 +18,8 @@ Design:
 ** Scrape the specific product data.
 
 get_product_links:
-- need to know how many products per page (can probably assume the default of 12)
-- need to know how many pages to visit
+- assume 12 products per page (hhgregg default)
+- determine number of pages to visit
 
 * Build the url that will be used to fetch successive product pages
 * Grab the product urls from the current page.
@@ -136,106 +136,63 @@ class HhgreggSpider(scrapy.Spider):
     def parse_product(self, response):
         item = ProductItem()
 
-        # Ex. '(Model: WRX735SDBM)'
-        try:
-            raw_mpn = response.xpath("//span[@class='model_no']/text()").extract()[0]
-            mpn = raw_mpn.split(':')[1].strip().strip(')')
-        except IndexError as e:
-            self.log("No mpn found", level=scrapy.log.INFO)
-            mpn = None
-
+        # I don't see a distinction between between the following on hhgregg
+        mpn = self.get_mpn(response)
         item['mpn'] = mpn
         item['sku'] = mpn
         item['upc'] = None
-        item['model'] = mpn    # I don't see a distinction between the two on hhgregg
+        item['model'] = mpn
 
-        # Ex. 'Whirlpool 24.5 Cu. Ft. Stainless Steel French Door 4-Door Refrigerator'
-        try:
-            title = response.xpath("//h1[@class='catalog_link CachedItemSegmentItemDisplay']/text()").extract()[0]
-            brand = title.split(' ')[0]
-        except IndexError as e:
-            self.log("No title found", level=scrapy.log.INFO)
-            title = None
-            brand = None
-
+        title = self.get_title(response)
         item['title'] = title
 
-        item['brand'] = brand
+        item['brand'] = title.split(' ')[0] if title else None
 
-        item['trail'] = response.xpath("//div[@id='breadcrumb']/a/text()").extract()
+        item['trail'] = self.get_trail(response)
 
-        try:
-            raw_rating = response.xpath("//span[@class='pr-rating pr-rounded average']/text()").extract()[0]
-            try:
-                item['rating'] = int((float(raw_rating) / 5) * 100)
-            except ValueError as e:
-                self.log("Couldn't convert rating to float: {}".format(raw_rating), level=scrapy.log.INFO)
-                item['rating'] = None
-        except IndexError as e:
-            self.log("No rating found", level=scrapy.log.INFO)
-            item['rating'] = None
+        item['rating'] = self.get_rating(response)
 
-        item['features'] = response.xpath("//div[@class='features_list']/ul/li/span/b/text()").extract()
-
-        image_request_url_base = 'http://hhgregg.scene7.com/is/image/hhgregg/'
-        image_request_params = '_is?req=set,json'
-        image_req_url = image_request_url_base + mpn + image_request_params
-
-        image_req = Request(url=image_req_url, callback=self.get_image_urls)
-        image_req.meta['item'] = item
-
-        raw_id = response.xpath("//div[contains(@id, 'productIdForPartNum')]/@id").extract()[0]
-        item['retailer_id'] = raw_id.split('_')[1]
-
-        try:
-            item['description'] = response.xpath("//div[@id='Features']/div[@class='']/p/text()").extract()[0]
-        except IndexError as e:
-            self.log("No description found", level=scrapy.log.INFO)
-            item['description'] = ''
+        item['features'] = self.get_features(response)
 
         item['currency'] = 'USD'    # There are no hhgregg stores outside the U.S.
 
-        try:
-            raw_current_price = response.xpath("//span[@class='price spacing']/text()").extract()[0]
-            item['current_price'] = raw_current_price\
-                    .replace('\n', '')\
-                    .replace('\r', '')\
-                    .replace('\t', '')\
-                    .replace(' ', '')
-        except IndexError as e:
-            self.log("No current price found", level=scrapy.log.INFO)
-            item['current_price'] = None
+        item['retailer_id'] = self.get_retailer_id(response)
 
-        try:
-            raw_original_price = response.xpath("//div[@class='reg_price strike-through']/span[2]/text()").extract()[0]
-            item['original_price'] = raw_original_price\
-                .replace('\n', '')\
-                .replace('\r', '')\
-                .replace('\t', '')\
-                .replace(' ', '')
-        except IndexError as e:
-            self.log("No original price found", level=scrapy.log.INFO)
-            item['original_price'] = None
+        item['description'] = self.get_description(response)
 
-        specs = {}
-        details = response.xpath("//div[@class='specDetails']")
-        for detail in details:
-            raw_spec_names = detail.xpath(".//span[@class='dotted']/text()").extract()
-            raw_spec_values = detail.xpath(".//span[@class='specdesc_right']/text()").extract()
+        item['current_price'] = self.get_current_price(response)
 
-            spec_names = map(lambda name: name.split(':')[0], raw_spec_names)
-            spec_values = map(lambda value: value.replace('\n', '').replace('\r', '').strip().rstrip(), raw_spec_values)
+        item['original_price'] = self.get_original_price(response)
 
-            for spec_name, spec_value in zip(spec_names, spec_values):
-                specs[spec_name] = spec_value
+        item['specifications'] = self.get_specifications(response)
 
-        item['specifications'] = specs
-        item['available_online'] = True if response.xpath("//div[contains(@class, 'InstoreSpecialOrder')]") else False
-        item['available_instore'] = True    # Haven't been able to find an item that was online only for all locations
+        online, in_store = self.get_availability(response)
+        item['available_online'] = online
+        item['available_instore'] = in_store
 
-        return item
+        #self.get_image_urls(mpn, item)
+        image_request_url_base = 'http://hhgregg.scene7.com/is/image/hhgregg/'
+        image_request_params = '_is?req=set,json'
+        image_req_url = image_request_url_base + (mpn if mpn else '') + image_request_params
 
-    def get_image_urls(self, response):
+        image_req = Request(url=image_req_url, callback=self.get_image_urls_callback)
+        image_req.meta['item'] = item
+
+        yield image_req
+
+    def get_image_urls(self, mpn, item):
+        image_request_url_base = 'http://hhgregg.scene7.com/is/image/hhgregg/'
+        image_request_params = '_is?req=set,json'
+        image_req_url = image_request_url_base + (mpn if mpn else '') + image_request_params
+
+        image_req = Request(url=image_req_url, callback=self.get_image_urls_callback)
+        image_req.meta['item'] = item
+
+        return image_req
+
+    def get_image_urls_callback(self, response):
+        self.log("Inside image_url callback", level=scrapy.log.DEBUG)
+
         item = response.meta['item']
         body = response.body    # body includes json data
 
@@ -251,3 +208,150 @@ class HhgreggSpider(scrapy.Spider):
         item['primary_image_url'] = image_urls[0]
 
         return item
+
+    def get_mpn(self, response):
+        # Ex. '(Model: WRX735SDBM)'
+        try:
+            raw_mpn = response.xpath("//span[@class='model_no']/text()").extract()[0]
+            mpn = raw_mpn.split(':')[1].strip().strip(')')
+
+            return mpn
+        except IndexError as e:
+            self.log("No mpn found", level=scrapy.log.INFO)
+
+            return None
+
+    def get_title(self, response):
+        # Ex. 'Whirlpool 24.5 Cu. Ft. Stainless Steel French Door 4-Door Refrigerator'
+        try:
+            title = response.xpath("//h1[@class='catalog_link CachedItemSegmentItemDisplay']/text()").extract()[0]
+
+            return title
+        except IndexError as e:
+            self.log("No title found", level=scrapy.log.INFO)
+
+            return None
+
+    def get_trail(self, response):
+        return response.xpath("//div[@id='breadcrumb']/a/text()").extract()
+
+    def get_rating(self, response):
+        try:
+            rating_str = response.xpath("//span[@class='pr-rating pr-rounded average']/text()").extract()[0]
+        except IndexError as e:
+            self.log("Rating, failed first attempt", level=scrapy.log.INFO)
+
+            try:
+                rating_text = response.xpath(
+                        "//script[@type='text/javascript' and contains(text(), 'ratingUrl=')]"
+                        ).extract()[0]
+                rating_str = rating_text.split('ratingUrl=')[1].split("'")[0]
+            except IndexError as e:
+                self.log("Rating, failed second attempt", level=scrapy.log.INFO)
+
+                rating_str = None
+
+        try:
+            rating = int((float(rating_str) / 5) * 100)
+        except (ValueError, TypeError) as e:
+            self.log("Couldn't convert rating to float: {}".format(rating_str), level=scrapy.log.INFO)
+
+            rating = None
+
+        return rating
+
+    def get_features(self, response):
+        """
+        features = response.xpath("//div[@class='features_list']/ul/li/span/text()").extract()
+        features_bold = response.xpath("//div[@class='features_list']/ul/li/span/b/text()").extract()
+
+        if len(features_bold) == len(features):
+            return [bold + feature for bold, feature in zip(features_bold, features)]
+
+        return features
+        """
+        features = []
+        raw_features = response.xpath("//div[@class='features_list']/ul/li")
+        for line in raw_features:
+            child_nodes = line.xpath(".//child::*/text()").extract()
+            feature_text = ''
+            for text in child_nodes:
+                feature_text += text
+            features.append(feature_text)
+
+        return features
+
+
+    def get_description(self, response):
+        try:
+            description = response.xpath("//div[@id='Features']/div[@class='']/p/text()").extract()[0]
+        except IndexError as e:
+            self.log("No description found", level=scrapy.log.INFO)
+
+            description = ''
+
+        return description
+
+    def get_retailer_id(self, response):
+        try:
+            raw_id = response.xpath("//div[contains(@id, 'productIdForPartNum')]/@id").extract()[0]
+
+            return raw_id.split('_')[1]
+        except IndexError as e:
+            self.log("Failed to find retailer_id", level=scrapy.log.INFO)
+
+            return None
+
+    def get_current_price(self, response):
+        try:
+            raw_current_price = response.xpath("//span[@class='price spacing']/text()").extract()[0]
+            price = raw_current_price\
+                    .replace('\n', '')\
+                    .replace('\r', '')\
+                    .replace('\t', '')\
+                    .replace(' ', '')
+
+            return price
+        except IndexError as e:
+            self.log("No current price found", level=scrapy.log.INFO)
+
+            return None
+
+    def get_original_price(self, response):
+        try:
+            raw_original_price = response.xpath("//div[@class='reg_price strike-through']/span[2]/text()").extract()[0]
+            original_price = raw_original_price\
+                    .replace('\n', '')\
+                    .replace('\r', '')\
+                    .replace('\t', '')\
+                    .replace(' ', '')
+
+            return original_price
+        except IndexError as e:
+            self.log("No original price found", level=scrapy.log.INFO)
+
+            return None
+
+    def get_specifications(self, response):
+        specs = {}
+        details = response.xpath("//div[@class='specDetails']")
+        for detail in details:
+            raw_spec_names = detail.xpath(".//span[@class='dotted']/text()").extract()
+            raw_spec_values = detail.xpath(".//span[@class='specdesc_right']/text()").extract()
+
+            spec_names = [name.split(':')[0] for name in raw_spec_names]
+            spec_values = [value.replace('\n', '').replace('\r', '').strip().rstrip() for value in raw_spec_values]
+
+            for spec_name, spec_value in zip(spec_names, spec_values):
+                specs[spec_name] = spec_value
+
+        return specs
+
+    def get_availability(self, response):
+        if response.xpath("//div[@class='product_details']/div[contains(text(), 'DISCONTINUED')]"):
+            online, in_store = False, False
+        else:
+            online = False if response.xpath("//div[contains(@class, 'InstoreSpecialOrder')]") else True
+            in_store = True    # Haven't been able to find an item that was online only for all locations
+
+        return online, in_store
