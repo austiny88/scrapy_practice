@@ -98,10 +98,9 @@ class HhgreggSpider(scrapy.Spider):
 
         for link in product_links:
             url = "http://www.hhgregg.com" + link
+            page_products.append(Request(url=url, callback=self.parse_product))
 
             self.log("product link: '{}'".format(url), level=scrapy.log.DEBUG)
-
-            page_products.append(Request(url=url, callback=self.parse_product))
 
         self.log("In parse_page, found {} products".format(len(page_products)), level=scrapy.log.DEBUG)
 
