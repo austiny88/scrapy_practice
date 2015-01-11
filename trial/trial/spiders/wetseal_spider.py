@@ -23,15 +23,14 @@ class WetsealSpider(scrapy.Spider):
         for state in states:
             url = search_url + '&' + state_field + '=' + state + '&' + search_field_and_value
 
-            location_item = Request(url=url, method='GET', callback=self.parse_store)
+            location_item = Request(url=url, method='GET', callback=self.parse_state_stores)
 
             yield location_item
 
-    def parse_store(self, response):
-        self.log(response.status, level=scrapy.log.DEBUG)
-
+    def parse_state_stores(self, response):
         stores = response.xpath("//*[@id='store-location-results']/tbody/tr")
 
+        items = []
         for store in stores:
             item = LocationItem()
 
@@ -70,7 +69,9 @@ class WetsealSpider(scrapy.Spider):
             raw_hours = store.xpath(".//div[@class='store-hours']/text()").extract()
             item['hours'] = self.parse_to_hours_dict(raw_hours, item['store_name'])
 
-            yield item
+            items.append(item)
+
+        return items
 
     def parse_to_hours_dict(self, store_hours, info):
         self.log('-- parsing hours for {}'.format(info), level=scrapy.log.DEBUG)
